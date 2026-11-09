@@ -29,6 +29,7 @@ import {
 import { safeFetchBuffer, looksLikeImageBuffer } from './safe-fetch.js';
 import { SOURCE_DSH_DEFAULT, defaultSelectionOf, effectiveChatModel, writesGlobalDefault } from './dsh-model-follow.js';
 import { isSpamCommandText } from './command-spam.js';
+import { buildVideoSheetFromBuffer, fetchHttpVideoBuffer, resolveVideoFfmpeg, DEFAULT_MAX_VIDEO_BYTES } from './video-frames.mjs';
 import { discoverDshBaseUrl, isLoopbackBaseUrl, probeDshBaseUrl } from './dsh-port.js';
 import { AUDIO_EXTS, cleanupTemp, describeAudio, inspectAudio, listAudioFiles, parseTargetKey, processAudioVolume, resolveAudioProcessing, resolveAudioSource, safeJoinLibrary } from './send-voice-lib.js';
 import { createVoicePacks } from './voice-packs.js';
@@ -1790,6 +1791,18 @@ function extractMediaFromSegments(segments) {
         url: String(d.url ?? ''),
         summary: sanitizeMediaSummary(d.summary)
       });
+    } else if (seg.type === 'video') {
+      // 视频段（SnowLuma 线上段落）：只给 file/url/thumb 三个定位字段，没有时长。
+      // 这里只存元数据、不下载——真正要看画面时由 /api/images/message 按需下载抽帧。
+      const video = {
+        kind: 'video',
+        file: String(d.file ?? ''),
+        url: String(d.url ?? ''),
+        thumb: String(d.thumb ?? d.thumbUrl ?? d.thumb_url ?? d.cover ?? '')
+      };
+      const size = Number(d.file_size ?? d.fileSize ?? d.size ?? 0);
+      if (Number.isFinite(size) && size > 0) video.size = size;
+      media.push(video);
     }
   }
   return media;
@@ -10117,6 +10130,16 @@ async function main() {
     return Number.isFinite(n) && n > 0 ? Math.min(64_000_000, Math.max(1_000_000, Math.round(n))) : 64_000_000;
   })(); // 单张图片像素上限，防止“图片炸弹”解码拖垮 DSH
   const MAX_MEDIA_STORE_PER_KEY = 500; // 每个会话最多缓存多少条消息的媒体元数据，防止无限增长
+  // 视频原片上限（2026-11-07 加）：只用于判断「要不要下载原片抽帧」，与图片的
+  // MAX_MEDIA_BYTES 无关——九宫格 jpg 通常 100~400KB，仍按图片总字节上限算。
+  const MAX_VIDEO_BYTES = (() => {
+    const n = Number(cfg.socialV2?.media?.maxVideoBytes);
+    return Number.isFinite(n) && n > 0
+      ? Math.min(300 * 1024 * 1024, Math.max(1 * 1024 * 1024, Math.round(n)))
+      : DEFAULT_MAX_VIDEO_BYTES;
+  })();
+  const VIDEO_SHEET_TTL_MS = 10 * 60 * 1000; // 同一段视频的九宫格缓存 10 分钟，模型重试时不重复下载
+  const videoSheetCache = new Map();
 
   function isSafeLocalMediaPath(filePath) {
     try {
@@ -10330,6 +10353,83 @@ async function main() {
       : `（${noun}获取失败）`;
   }
 
+  // ── 视频看画面（2026-11-07）──────────────────────────────────────────────
+  // 背景：QQ 入站视频以前只被 segmentsToText 写成一行「[视频]」，模型完全看不到画面。
+  // 现在 extractMediaFromSegments 保留 video 段元数据，这里按需下载原片 → ffmpeg 均匀
+  // 抽 9 帧拼 3x3 九宫格 → fetchMediaData 把它当一条 image 交给模型。
+  // 旧的 MCP 工具 qq_get_message_images 是纯透传（只认 images[].data+mimeType），
+  // 所以整条链路不需要重启 MCP / DSH，只重启桥。
+  function videoFfmpegPath() {
+    const explicit = cfg.socialV2?.media?.ffmpegPath || voiceCfg().ffmpegPath || null;
+    return resolveVideoFfmpeg({ explicit });
+  }
+
+  async function fetchVideoBytes(media) {
+    const url = String(media?.url ?? '').trim();
+    if (/^https?:\/\//i.test(url)) return fetchHttpVideoBuffer(url, { maxBytes: MAX_VIDEO_BYTES });
+    const fileRef = String(media?.file ?? '').trim();
+    if (!fileRef) return null;
+    // ① OneBot 标准 get_file：网关通常能给出可下载地址或本地缓存路径
+    try {
+      const info = await bot.raw('get_file', { file: fileRef });
+      const candidateUrl = String(info?.url ?? '');
+      if (/^https?:\/\//i.test(candidateUrl)) return await fetchHttpVideoBuffer(candidateUrl, { maxBytes: MAX_VIDEO_BYTES });
+      const candidatePath = String(info?.file ?? '');
+      if (candidatePath) {
+        const bases = [path.resolve(candidatePath)];
+        const homeDir = cfg.snowluma?.homeDir ? String(cfg.snowluma.homeDir) : '';
+        if (homeDir) bases.push(path.resolve(homeDir, candidatePath));
+        for (const candidate of bases) {
+          try {
+            if (fs.statSync(candidate).isFile() && isSafeLocalMediaPath(candidate)) return fs.readFileSync(candidate);
+          } catch {}
+        }
+      }
+    } catch (error) {
+      log(`[media] 视频 get_file 失败（${fileRef}）：${error?.message ?? error}`);
+    }
+    // ② 网关缓存目录里的本地文件兜底（只读 SnowLuma homeDir 内的路径，见 isSafeLocalMediaPath）
+    const candidates = [fileRef];
+    if (cfg.snowluma?.homeDir) candidates.push(path.resolve(String(cfg.snowluma.homeDir), fileRef));
+    for (const candidate of candidates) {
+      try {
+        if (fs.statSync(candidate).isFile() && isSafeLocalMediaPath(candidate)) return fs.readFileSync(candidate);
+      } catch {}
+    }
+    return null;
+  }
+
+  async function fetchVideoThumb(media) {
+    const thumb = String(media?.thumb ?? '').trim();
+    if (!/^https?:\/\//i.test(thumb)) return null;
+    try {
+      const fetched = await safeFetchBuffer(thumb, MAX_MEDIA_BYTES);
+      return acceptImageBuffer(fetched.buffer, '视频封面');
+    } catch (error) {
+      log(`[media] 视频封面抓取失败：${error?.message ?? error}`);
+      return null;
+    }
+  }
+
+  async function buildVideoFrames(media) {
+    const cacheKey = String(media?.url || media?.file || '');
+    if (cacheKey) {
+      const cached = videoSheetCache.get(cacheKey);
+      if (cached && Date.now() - cached.at < VIDEO_SHEET_TTL_MS) return cached.value;
+    }
+    const bytes = await fetchVideoBytes(media);
+    if (!bytes) return { text: '视频原片没下载到（网关没给可下载地址），只能看看封面' };
+    const value = await buildVideoSheetFromBuffer(bytes, { ffmpegPath: videoFfmpegPath() });
+    if (cacheKey) {
+      videoSheetCache.set(cacheKey, { at: Date.now(), value });
+      while (videoSheetCache.size > 8) {
+        const oldest = videoSheetCache.keys().next().value;
+        videoSheetCache.delete(oldest);
+      }
+    }
+    return value;
+  }
+
   async function resolveMediaList(mediaList) {
     const parts = [];
     let index = 0;
@@ -10361,6 +10461,12 @@ async function main() {
         } else {
           parts.push({ type: 'text', text });
         }
+        continue;
+      }
+      if (media.kind === 'video') {
+        // 一代（chat/reserved）消息是直接内联进上下文的，视频体积太大没法内联；
+        // 这里只留一句占位说明，避免模型以为消息里没东西。真正抽帧走二代按需工具。
+        parts.push({ type: 'text', text: `[视频${index}]（一代模式不内联视频画面，可先用其它方式下载后处理）` });
         continue;
       }
       if (media.kind === 'face') {
@@ -10404,7 +10510,7 @@ async function main() {
     for (const media of Array.isArray(mediaList) ? mediaList : []) {
       index += 1;
       if (index > MAX_MEDIA_COUNT) {
-        out.push({ index, kind: media?.kind === 'face' ? 'face' : (media?.kind === 'sticker' ? 'sticker' : 'image'), text: `（超过单条上限 ${MAX_MEDIA_COUNT}，已跳过）` });
+        out.push({ index, kind: media?.kind === 'face' ? 'face' : (media?.kind === 'sticker' ? 'sticker' : (media?.kind === 'video' ? 'video' : 'image')), text: `（超过单条上限 ${MAX_MEDIA_COUNT}，已跳过）` });
         continue;
       }
       if (!media || typeof media !== 'object') continue;
@@ -10428,6 +10534,38 @@ async function main() {
         } else {
           parts.push({ type: 'text', text });
         }
+        continue;
+      }
+      if (media.kind === 'video') {
+        // 视频：下载原片 → 3x3 九宫格 jpg。MCP 工具会把它当图片透传给模型。
+        let frames = null;
+        try {
+          frames = await buildVideoFrames(media);
+        } catch (error) {
+          log(`[media] 视频抽帧失败：${error?.message ?? error}`);
+          frames = { text: `视频画面处理失败：${error?.message ?? error}` };
+        }
+        if (frames?.buffer) {
+          if (totalBytes + frames.buffer.length > MAX_MEDIA_BYTES) {
+            out.push({ index, kind: 'video', text: '（视频九宫格超过单条消息图片总大小上限，已跳过）' });
+            continue;
+          }
+          totalBytes += frames.buffer.length;
+          out.push({ index, kind: 'video', mimeType: frames.mimeType || 'image/jpeg', data: frames.buffer.toString('base64'), text: frames.text || '' });
+          continue;
+        }
+        // 原片下载/抽帧失败时至少给封面（封面是图片，走图片校验）
+        const thumb = await fetchVideoThumb(media);
+        if (thumb?.buffer) {
+          if (totalBytes + thumb.buffer.length > MAX_MEDIA_BYTES) {
+            out.push({ index, kind: 'video', text: frames?.text || '（视频封面超过图片总大小上限，已跳过）' });
+            continue;
+          }
+          totalBytes += thumb.buffer.length;
+          out.push({ index, kind: 'video', mimeType: thumb.mimeType || 'image/jpeg', data: thumb.buffer.toString('base64'), text: `${frames?.text || '视频原片没下到'}（这是封面图，不是抽帧）` });
+          continue;
+        }
+        out.push({ index, kind: 'video', text: frames?.text || '视频画面获取失败' });
         continue;
       }
       if (media.kind === 'face') {
@@ -10484,15 +10622,34 @@ async function main() {
 
   function mediaHintFor(key, messageRef, mediaList) {
     if (!Array.isArray(mediaList) || mediaList.length === 0 || !messageRef) return '';
+    const videos = mediaList.filter((m) => m && m.kind === 'video').length;
+    const images = mediaList.length - videos;
+    const lines = [];
+    const imageHint = `【图片/表情】本条消息包含 ${images} 个图片/表情（消息ID=${messageRef}）。`;
+    const imageCall = `如需要查看/识别，请调用 mcp__snowluma__qq_get_message_images，参数 key="${key}", messageId="${messageRef}"。`;
+    const videoCall = `【视频】本条消息包含 ${videos} 个视频（消息ID=${messageRef}），你直接看不到画面。想看时调用 mcp__snowluma__qq_get_message_images（参数 key="${key}", messageId="${messageRef}"），它会把视频按时间抽 9 帧拼成 3x3 九宫格当图片给你；只调一次就够，别反复调。`;
     if (currentMode === 'reserved2') {
-      return `\n【图片/表情】本条消息包含 ${mediaList.length} 个图片/表情（消息ID=${messageRef}）。如需要查看/识别，请调用 mcp__snowluma__qq_get_message_images，参数 key="${key}", messageId="${messageRef}"。`;
+      if (images > 0) lines.push(imageHint + imageCall);
+      if (videos > 0) lines.push(videoCall);
+    } else {
+      if (images > 0) lines.push(imageHint + '（一代会直接内联图片）');
+      if (videos > 0) lines.push(`【视频】本条消息包含 ${videos} 个视频（消息ID=${messageRef}）；一代模式不会内联视频画面。`);
     }
-    return `\n【图片/表情】本条消息包含 ${mediaList.length} 个图片/表情（消息ID=${messageRef}）。`;
+    return lines.length ? `\n${lines.join('\n')}` : '';
   }
 
   function findMessageMedia(key, ref) {
     const refStr = String(ref ?? '').trim();
     if (!refStr) return [];
+    // 优先用入站时原样保存的媒体元数据（messageMediaStore）：它带全 file/url/thumb/size
+    // 与 emoji 字段；二代 state 里那份是给模型看的精简副本（历史上还会把 video 拍平成 image）。
+    // 先查 store 能保证按需拉视频/表情时拿到最完整的定位信息；state 只作兜底——
+    // 进程重启后 store 是空的，但 state 会持久化。
+    const byRef = messageMediaStore.get(key);
+    if (byRef) {
+      const hit = byRef.get(refStr);
+      if (Array.isArray(hit) && hit.length) return hit;
+    }
     // 二代：消息对象上直接带 media（仅在确实存在二代会话状态时读取，避免为 gen1 创建影子状态）
     if (currentMode === 'reserved2' || socialV2.conversations.has(key)) {
       try {
@@ -10506,16 +10663,6 @@ async function main() {
           }
         }
       } catch {}
-    }
-    // 一代/普通模式：messageMediaStore
-    const byRef = messageMediaStore.get(key);
-    if (byRef) {
-      const hit = byRef.get(refStr);
-      if (Array.isArray(hit)) return hit;
-      // 兼容按 seq 查找（messageMediaStore 只存 messageId 时，尝试遍历所有值）
-      for (const [storedRef, media] of byRef) {
-        if (String(storedRef) === refStr && Array.isArray(media)) return media;
-      }
     }
     return [];
   }
@@ -14306,10 +14453,17 @@ async function main() {
     // 与「部分表情 20 秒超时」的根因）；丢了 summary，模型只看到「[图片1]」而不是「[表情:给你糖吃]」；
     // kind 被拍平还会让 mface（市场表情）被当成普通图片。
     const safeMedia = Array.isArray(media) ? media.map((m) => {
-      const kind = m?.kind === 'face' ? 'face' : (m?.kind === 'sticker' ? 'sticker' : 'image');
+      // 视频段同理：以前这里把 video 拍平成 image，于是按需查看时拿到 kind:'image'
+      // 就走图片下载（mp4 当图片，超过 8MB 直接失败）——用户真发视频时永远看不到画面。
+      // 必须原样保留 kind:'video' 以及 thumb/size，抽帧链路才能从 state 里取到定位信息。
+      const kind = m?.kind === 'video'
+        ? 'video'
+        : (m?.kind === 'face' ? 'face' : (m?.kind === 'sticker' ? 'sticker' : 'image'));
       const item = { kind };
       if (m?.file) item.file = String(m.file);
       if (m?.url) item.url = String(m.url);
+      if (m?.thumb) item.thumb = String(m.thumb);
+      if (m?.size != null && Number.isFinite(Number(m.size)) && Number(m.size) > 0) item.size = Number(m.size);
       if (m?.faceId) item.faceId = String(m.faceId);
       if (m?.emojiId) item.emojiId = String(m.emojiId);
       if (m?.uin) item.uin = String(m.uin);
@@ -15229,7 +15383,7 @@ async function main() {
       if (!Array.isArray(st.pendingWakeReasons)) st.pendingWakeReasons = [];
       const seq = st.lastUnreadSeq || 0;
       if (!st.pendingWakeReasons.some((r) => r && r.reason === reason && r.seq === seq)) {
-        st.pendingWakeReasons.push({ reason, seq });
+        st.pendingWakeReasons.push({ reason, seq, at: Date.now() });
         // 有界队列：最多保留 20 条，防止消息洪峰下无限增长。
         if (st.pendingWakeReasons.length > 20) st.pendingWakeReasons.splice(0, st.pendingWakeReasons.length - 20);
       }
@@ -15486,7 +15640,7 @@ async function main() {
       if (!Array.isArray(st.pendingWakeReasons)) st.pendingWakeReasons = [];
       const seq = st.lastUnreadSeq || 0;
       if (!st.pendingWakeReasons.some((r) => r && r.reason === reason && r.seq === seq)) {
-        st.pendingWakeReasons.push({ reason, seq });
+        st.pendingWakeReasons.push({ reason, seq, at: Date.now() });
         // 有界队列：最多保留 20 条，防止消息洪峰下无限增长。
         if (st.pendingWakeReasons.length > 20) st.pendingWakeReasons.splice(0, st.pendingWakeReasons.length - 20);
       }
@@ -15517,8 +15671,9 @@ async function main() {
    * 回合结束后补发「繁忙期间暂存」的唤醒原因。
    *
    * 两类原因必须分开处理：
-   *   · 消息类（@/关键词/提问/私聊/拍一拍…）只有在那条消息还没被本回合处理掉时才补发
-   *     （unread 里还能找到它的 seq）；
+   *   · 消息类（@/关键词/提问/私聊/拍一拍…）不再按入队顺序补最旧的那条：只挑 seq 最大（最新）
+   *     的一条补发一次，其余积压项并作废；超过 TTL 的旧项直接丢（若全是旧项则仍补最新一条，
+   *     避免一条都不回）。见 PITFALLS #127。
    *   · 定时器类（timeout/replyCheck/proactiveCheck/bootstrap/admin）与未读水位无关：
    *     那一轮很可能已经把未读全部标读，用 unread 判断会让「到点唤醒」被静默吞掉 ——
    *     timeout 时 sleepTimer 已被清空，结果是会话停在「sleepUntil 已过期、无任何定时器」。
@@ -15526,32 +15681,61 @@ async function main() {
   function replayPendingWakeReasonsV2(key) {
     const st = getSocialV2State(key);
     if (!Array.isArray(st.pendingWakeReasons) || !st.pendingWakeReasons.length) return null;
-    const item = st.pendingWakeReasons.shift();
-    if (!item || typeof item !== 'object') return null;
-    if (isTimerWakeReason(item.reason)) {
-      if (item.reason === 'timeout') {
+    // 繁忙期间积压的唤醒最多补发这么久以内的（更旧的作废，避免补出来的是几分钟前的旧消息）。
+    const PENDING_WAKE_REPLAY_TTL_MS = 3 * 60_000;
+    // 定时器类优先补：它们与未读水位无关，丢了会让会话停在「没有任何定时器」的静默态。
+    const timerIdx = st.pendingWakeReasons.findIndex(
+      (it) => it && typeof it === "object" && isTimerWakeReason(it.reason),
+    );
+    if (timerIdx >= 0) {
+      const item = st.pendingWakeReasons.splice(timerIdx, 1)[0];
+      if (item.reason === "timeout") {
         log(`[reserved2] ${key} 补收繁忙期间到期的潜水定时器`);
         setupSleepTimerV2(key);
-      } else if (item.reason === 'replyCheck') {
+      } else if (item.reason === "replyCheck") {
         log(`[reserved2] ${key} 补排繁忙期间的回复检查`);
         scheduleReplyCheckV2(key);
-      } else if (item.reason === 'proactiveCheck') {
+      } else if (item.reason === "proactiveCheck") {
         // 主动机会有周期性重排，错过一次可接受（也不该在回合结束时立刻补一刀）。
         log(`[reserved2] ${key} 繁忙期间的主动机会已过期，跳过补发`);
       } else {
         log(`[reserved2] ${key} 补发繁忙期间积压的唤醒：${item.reason}`);
         scheduleWakeV2(key, item.reason);
       }
-      return { reason: item.reason, action: 'timer' };
+      return { reason: item.reason, action: "timer" };
     }
-    const stillRelevant = Array.isArray(st.unread) && st.unread.some((m) => m && Number(m.seq) >= Number(item.seq));
+    // 消息类：不再 shift() 最旧的一条。那往往已经过了几分钟，回合里真正看到的是最新未读，
+    // 补旧消息会让回复错位、重复（2026-11-04 的「你我他」串话就是这么来的）。改成只按 seq
+    // 最大的一条补发一次，其余积压项并作废；超过 TTL 的旧项直接丢。全是旧项时仍补最新一条，
+    // 避免一条都不回。
+    const nowMs = Date.now();
+    const msgItems = st.pendingWakeReasons.filter((it) => it && typeof it === "object");
+    st.pendingWakeReasons = [];
+    if (!msgItems.length) return null;
+    const fresh = msgItems.filter((it) => !it.at || nowMs - Number(it.at) <= PENDING_WAKE_REPLAY_TTL_MS);
+    if (fresh.length < msgItems.length) {
+      log(
+        `[reserved2] ${key} 作废 ${msgItems.length - fresh.length} 条超过 ${Math.round(PENDING_WAKE_REPLAY_TTL_MS / 60000)} 分钟的积压唤醒`,
+      );
+    }
+    const pool = (fresh.length ? fresh : msgItems)
+      .slice()
+      .sort((a, b) => Number(b.seq || 0) - Number(a.seq || 0));
+    const best = pool[0];
+    if (msgItems.length > 1) {
+      log(
+        `[reserved2] ${key} 积压唤醒 ${msgItems.length} 条，只按最新一条 seq${best.seq} 补发，其余 ${msgItems.length - 1} 条并作废`,
+      );
+    }
+    const stillRelevant =
+      Array.isArray(st.unread) && st.unread.some((m) => m && Number(m.seq) >= Number(best.seq));
     if (stillRelevant) {
-      log(`[reserved2] ${key} 补发繁忙期间积压的唤醒：${item.reason}@seq${item.seq}`);
-      scheduleWakeV2(key, item.reason);
-      return { reason: item.reason, action: 'replayed' };
+      log(`[reserved2] ${key} 补发繁忙期间积压的唤醒：${best.reason}@seq${best.seq}`);
+      scheduleWakeV2(key, best.reason);
+      return { reason: best.reason, action: "replayed" };
     }
-    log(`[reserved2] ${key} 繁忙期间唤醒 ${item.reason}@seq${item.seq} 已被当前回合处理，跳过补发`);
-    return { reason: item.reason, action: 'skipped' };
+    log(`[reserved2] ${key} 繁忙期间唤醒 ${best.reason}@seq${best.seq} 已被当前回合处理，跳过补发`);
+    return { reason: best.reason, action: "skipped" };
   }
 
   // ── 上线补历史消息（socialV2.history） ──────────────────────────────────

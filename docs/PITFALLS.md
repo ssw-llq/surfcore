@@ -3993,6 +3993,28 @@ npm run test:audit
 - tone 读取失败仍静默空串。
 - 没在真实运行桥接上看 `/api/socialV2/prompt` 全文。
 
+## #127（2026-11-04）繁忙积压唤醒按「最旧一条」补发 → 回复错位/重复
+
+- **现象**：会话繁忙期间积压了多条唤醒（`pendingWakeReasons`），回合结束后补发的是 FIFO 里最旧的一条；模型拿着最新的未读上下文去回几分钟前的问句，用户看到答非所问，甚至连续两条措辞几乎重复。
+- **根因**：`replayPendingWakeReasonsV2()` 用 `shift()` 取最旧一条；「是否已被本回合处理」用 `st.unread.some(m => m.seq >= item.seq)` 判断，而未读窗口里装的是最新几条，seq 天然更大，必然判「仍相关」——旧消息当触发源、新上下文当依据。
+- **修法**（2026-11-04）：入队带 `at: Date.now()`；replay 重写——定时器类仍优先 `findIndex`+`splice` 补；消息类整队取出并清空、按 3 分钟 TTL 过滤、按 seq 降序只补最新一条（全过期时仍补最新一条，避免一条不回），其余作废并打日志。
+- **教训**：「别丢消息」和「补哪条消息」是两个问题。队列顺序 ≠ 未读窗口语义；凡是从积压里挑一条触发模型，都要按「用户此刻真实在问什么」来挑（最新）。验证时要专门造「两条积压、seq 从旧到新」的用例，只验证「补发发生了」不够。case：`docs/cases/2026-11-04-replay-latest-wake.md`。
+
+## #128（2026-11-07）给 bridge.js 加了新 import，审计套件却全红：vm 注入没跟上
+
+- **现象**：给 `src/bridge.js` 加 `import { ... } from './video-frames.mjs'` 后，`npm run test:audit` 里一大片互不相关的脚本同时报 `ReferenceError: DEFAULT_MAX_VIDEO_BYTES is not defined`；但 `node --check src/bridge.js` 和直接跑桥都正常。
+- **根因**：`scripts/audit-bridge-harness.mjs` 的测试方式是「读 `src/bridge.js` 源码 → 逐行剥掉顶层 import → 在 `vm` 里用注入的导出补全局」。`bridge.js` 顶层 import 被剥掉后，代码里引用的新模块导出在 vm context 里并不存在——**bridge.js 每新增一个 import，harness 必须同步 import 同一模块并 spread 进 context**，否则所有走 harness 的测试一起 ReferenceError。
+- **修法**（2026-11-07）：harness 顶部加 `import * as videoFrames from '../src/video-frames.mjs';`，context 里加 `...videoFrames,`。
+- **教训**：看到「一大片互不相关的测试同时红 + `X is not defined`」，先去查 harness 的 vm 注入，而不是逐个测试排查；`node --check` / 真跑桥都绿只能说明语法与运行路径没问题，测不到测试夹具的盲区。case：`docs/cases/2026-11-07-qq-video-frames.md`。
+
+## #129（2026-11-07）用户真发来 QQ 视频却「只看到一个占位的框」：媒体在会话状态里被拍平成 image
+
+- **现象**：QQ 视频通道做完、本地 h264 测试全绿后，用户真在群里发来 15 分钟视频并 @ 机器人；模型回「视频我这边打不开，只看到一个占位的框」。`state/bridge.log` 只有一条 `[media] 图片获取失败（2 次尝试）：get_image: image not found in cache | https://multimedia.nt.qq.com.cn/download?...orgfmt=t264...: 图片超过大小限制（8388608 字节）`，URL 是 mp4。
+- **根因**：`appendSocialV2Message()` 把入站媒体写进二代会话状态时只留 `face/sticker/image` 三选一，**video 被拍平成 image**；而 `findMessageMedia()` 先查 state、`messageMediaStore` 只作兜底 → 按需查看拿到 `kind:'image'` 的视频定位信息 → 走图片下载（mp4 当图片，超过 8MB 上限）→ 必然失败，抽帧代码根本没被调用，日志里也不会出现「视频」两个字。
+- **修法**（2026-11-07）：① `appendSocialV2Message` 的 safeMedia 保留 `kind:'video'` 与 `thumb/size`；② `findMessageMedia` 改为**先查 `messageMediaStore`（入站原始字段最全）再退回 state**；③ `scripts/test-video-frames.mjs` 增加 3 条源码级回归断言：safeMedia 保留 video、findMessageMedia 先 store 后 state、fetchMediaData 有视频分支。
+- **验证**：重启桥后用真实 15 分钟 / 28MB 群视频调 `GET /api/images/message` → `200`、`media=[{kind:'video'}]`、`images=[{kind:'video',mimeType:'image/jpeg',bytes:207810,text:'视频（约 935.5 秒）…'}]`，约 29s 出九宫格；`test:audit`、`test:regressions` 结果与基线一致（除两个既有环境性失败）。
+- **教训**：`[视频]` 占位文字看着正常，不代表媒体层分类正确——**存储层做 kind 白名单归一化时，新增一种媒体必须同步把 kind 加进去**（现在有回归测试钉住）。另外「按需解析」应优先用入站时最原始的元数据，给模型看的精简副本只作兜底；两者不一致时，症状往往伪装成「网络/大小问题」。case：`docs/cases/2026-11-07-qq-video-frames.md`。
+
 ## 前端有、宿主漏注册：DSH 跟随开关 404
 
 - **现象**：0.8.7 设置页取消「跟随 DSH 默认模型」报 `未知接口：/dsh-surfcore/api/dsh/follow-default`。

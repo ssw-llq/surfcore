@@ -1,3 +1,23 @@
+## [0.8.10] - 2026-11-09
+
+### 新增
+
+- QQ 入站视频抽帧：新增 `src/video-frames.mjs`，下载视频原片后由 ffmpeg 按时间均匀抽 9 帧拼成 3×3 九宫格，经 `mcp__snowluma__qq_get_message_images` 作为图片交给模型；抽帧失败自动退封面图并标注「这是封面图，不是抽帧」，仍失败则文字说明；单条视频默认上限 100MB（`socialV2.media.maxVideoBytes` 可调 1MB–300MB），九宫格缓存 10 分钟。
+- 媒体提示词区分图片/视频：`mediaHintFor` 分别提示图片与视频（9 帧九宫格，调一次就够、别反复调），二代模式内联，一代模式只给文字占位。
+
+### 修复
+
+- 群视频被当成图片、模型只看到占位框：`appendSocialV2Message` 的 safeMedia 保留 `kind:'video'` 与 `thumb/size`；`findMessageMedia` 改为先查 `messageMediaStore`（入站原始字段最全）再退回 state；`safeMedia` 归一化不再丢视频类型（此前 mp4 被当图片下载，超 8MB 上限必然失败）。
+- 繁忙积压唤醒按「最旧一条」补发导致答非所问/重复：`replayPendingWakeReasonsV2` 重写——定时器类唤醒仍优先补，消息类整队取出后按 3 分钟 TTL 过滤、按 seq 降序只补最新一条（全过期也补最新一条，避免一条不回），其余作废并记录条数；`pendingWakeReasons` 入队时记录 `at`。
+- 审计套件 vm 注入漏注册：`scripts/audit-bridge-harness.mjs` 补 `videoFrames` 模块注入，避免 bridge.js 新增 import 后走 harness 的测试整片 `ReferenceError`。
+
+### 测试
+
+- 新增 `scripts/test-video-frames.mjs`：30 断言，覆盖私有地址/协议拦截、ffmpeg 探测、真实 ffmpeg 渲染九宫格、视频 kind 的存储层源码回归。
+- `npm run test:audit` 151/153（与 main 基线一致；`test-stickers`、`test-preset-local-tools` 为既有的环境相关失败，需本机 `config.json`）；`test:regressions` 16/16 全过。
+
+> 调查记录：[繁忙积压唤醒按最旧补发](docs/cases/2026-11-04-replay-latest-wake.md)、[QQ 入站视频抽帧](docs/cases/2026-11-07-qq-video-frames.md)
+
 ## [0.8.9] - 2026-11-07
 
 ### 向量记忆
