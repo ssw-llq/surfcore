@@ -104,7 +104,7 @@ cd plugins/surfcore && npm test # 必须 0 失败
    逐个 `cp` 本次改动的文件（不要整目录覆盖），提交、`git tag -a vX.Y.Z`。
 5. **推送**（`github.com:443` 常不通，用 GitHub Data API）：
    ```bash
-   GH_TOKEN=... node /tmp/pub.mjs Mieksido/surfcore D:/deepseekwork/opensource/surfcore \
+   GH_TOKEN=... node /tmp/pub.mjs ssw-llq/surfcore D:/deepseekwork/opensource/surfcore \
      --since <上次公开仓库 commit> --message "release: vX.Y.Z（...）"
    ```
    注意：`/tmp/pub.mjs` 是 `scripts/publish-via-api.mjs` 的副本；中文路径必须 `core.quotePath=false`（脚本已处理）。
@@ -116,10 +116,10 @@ cd plugins/surfcore && npm test # 必须 0 失败
 
 | 版本 | 日期 | 仓库 | main | Release |
 | --- | --- | --- | --- | --- |
-| v0.6.22 | 2026-10-28 | surfcore / surfvoicelocal / surfvoicecloud | d7f6b33 / d739c30 / f0d94d7 | https://github.com/Mieksido/surfcore/releases/tag/v0.6.22 |
-| v0.6.21 | 2026-10-28 | surfcore / surfvoicelocal / surfvoicecloud | e2bae36 / a1e24be / e914462 | https://github.com/Mieksido/surfcore/releases/tag/v0.6.21 |
-| v0.6.20 | 2026-10-28 | surfcore | 12975a3 | https://github.com/Mieksido/surfcore/releases/tag/v0.6.20 |
-| v0.6.19 | 2026-10-28 | surfcore | 28346fd | https://github.com/Mieksido/surfcore/releases/tag/v0.6.19 |
+| v0.6.22 | 2026-10-28 | surfcore / surfvoicelocal / surfvoicecloud | d7f6b33 / d739c30 / f0d94d7 | https://github.com/ssw-llq/surfcore/releases/tag/v0.6.22 |
+| v0.6.21 | 2026-10-28 | surfcore / surfvoicelocal / surfvoicecloud | e2bae36 / a1e24be / e914462 | https://github.com/ssw-llq/surfcore/releases/tag/v0.6.21 |
+| v0.6.20 | 2026-10-28 | surfcore | 12975a3 | https://github.com/ssw-llq/surfcore/releases/tag/v0.6.20 |
+| v0.6.19 | 2026-10-28 | surfcore | 28346fd | https://github.com/ssw-llq/surfcore/releases/tag/v0.6.19 |
 
 > 更早版本见 GitHub Releases 页；本表只记最近几次，避免无限增长。
 

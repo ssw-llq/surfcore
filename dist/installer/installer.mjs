@@ -21,7 +21,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CHECK_ONLY = process.argv.includes('--check');
 const ZIP_ARG = process.argv.includes('--zip') ? process.argv[process.argv.indexOf('--zip') + 1] : '';
 const TAG = 'v0.3.2';
-const REPO_ZIP = `https://github.com/Mieksido/surfcore/archive/refs/tags/${TAG}.zip`;
+const REPO_ZIP = `https://github.com/ssw-llq/surfcore/archive/refs/tags/${TAG}.zip`;
 const TARGET = path.join(HERE, 'surfcore');
 
 const say = (msg = '') => process.stdout.write(`${msg}\n`);

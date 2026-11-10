@@ -32,10 +32,10 @@
 
 【第二步：我确认后，准备暂存包】
 1. 下载最新源码包到 %TEMP%\surfcore-update\main.zip：
-   优先 https://codeload.github.com/Mieksido/surfcore/zip/refs/heads/main
+   优先 https://codeload.github.com/ssw-llq/surfcore/zip/refs/heads/main
    如果超时/被墙，改用镜像前缀再试：
-   https://gh-proxy.com/https://codeload.github.com/Mieksido/surfcore/zip/refs/heads/main
-   https://ghproxy.net/https://codeload.github.com/Mieksido/surfcore/zip/refs/heads/main
+   https://gh-proxy.com/https://codeload.github.com/ssw-llq/surfcore/zip/refs/heads/main
+   https://ghproxy.net/https://codeload.github.com/ssw-llq/surfcore/zip/refs/heads/main
 2. 解压到 %TEMP%\surfcore-update\stage\，里面会有一层 `surfcore-main\`；
    把 `surfcore-main\` 里的内容当作"新版本根目录"（后面的 staging 指它）。
 3. 检查 staging 里确实有 `package.json`、`plugins\surfcore\lib\index.js`，并把 staging 里的

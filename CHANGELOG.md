@@ -16,6 +16,10 @@
 - 新增 `scripts/test-video-frames.mjs`：30 断言，覆盖私有地址/协议拦截、ffmpeg 探测、真实 ffmpeg 渲染九宫格、视频 kind 的存储层源码回归。
 - `npm run test:audit` 151/153（与 main 基线一致；`test-stickers`、`test-preset-local-tools` 为既有的环境相关失败，需本机 `config.json`）；`test:regressions` 16/16 全过。
 
+### 变更
+
+- 发布源迁移：仓库地址从 `Mieksido/surfcore` 改为 **`ssw-llq/surfcore`**（原账号已不可用）。已在用的用户需要手动把更新源/克隆地址换成新仓库，或重新下载安装包；桌宠等配套仓库地址不变。
+
 > 调查记录：[繁忙积压唤醒按最旧补发](docs/cases/2026-11-04-replay-latest-wake.md)、[QQ 入站视频抽帧](docs/cases/2026-11-07-qq-video-frames.md)
 
 ## [0.8.9] - 2026-11-07

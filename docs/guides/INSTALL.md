@@ -72,7 +72,7 @@ SnowLuma 是第三方的 QQ 运行时，**本项目不打包、不代装**（EUL
 
 ```powershell
 cd D:\
-git clone https://github.com/Mieksido/surfcore.git
+git clone https://github.com/ssw-llq/surfcore.git
 cd surfcore
 npm install
 ```

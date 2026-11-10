@@ -293,7 +293,7 @@ export function apply(ctx) {
       const list = [];
       const updCfg = readUnified().config?.updates ?? {};
       // 1) SurfCore 本体：源码树，走 git
-      list.push({ id: 'surfcore', name: 'SurfCore 本体', dir: QQBOT_ROOT, kind: 'git', branch: 'main', versionRepo: 'Mieksido/surfcore' });
+      list.push({ id: 'surfcore', name: 'SurfCore 本体', dir: QQBOT_ROOT, kind: 'git', branch: 'main', versionRepo: 'ssw-llq/surfcore' });
       // 2) 语音包**不进入自动更新列表**：它是离线运行时/模型/vendor 包，
       //    不是 SurfCore 那种代码 zip；统一 updateFromZip 会按 surfcore-* + package.json
       //    解析而必然失败（2026-10-30 用户反馈）。需要新包时在「语音」页重新导入离线包，

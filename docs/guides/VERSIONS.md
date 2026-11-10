@@ -42,7 +42,7 @@
 
 | 组件 | 仓库 | 当前版本 | 版本清单 | 升级方式 |
 | --- | --- | --- | --- | --- |
-| SurfCore 本体 | `Mieksido/surfcore` | **0.3.0** | git tag | `git` 快进（`--ff-only`） |
+| SurfCore 本体 | `ssw-llq/surfcore` | **0.3.0** | git tag | `git` 快进（`--ff-only`） |
 | 语音包（本地） | `Mieksido/surfvoicelocal` | **0.1.0** | `models.json` | git 快进 / 拉模型 |
 | 语音包（云端） | `Mieksido/surfvoicecloud` | **0.1.0** | `models.json` | git 快进 / 拉模型 |
 | 桌宠 | `Mieksido/surfpet` | **0.2.0** | `version.json` | 下 zip → sha256 → 替换 |

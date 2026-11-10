@@ -15,7 +15,7 @@
 
 【1. 拉代码】
 cd $env:USERPROFILE
-git clone --depth 1 https://github.com/Mieksido/surfcore.git
+git clone --depth 1 https://github.com/ssw-llq/surfcore.git
 cd surfcore
 （已经有目录就 git pull --ff-only）
 
@@ -56,7 +56,7 @@ node scripts/detect-profile.mjs
 ## 附：一行命令版（如果 DSH 不方便分步执行）
 
 ```
-powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Mieksido/surfcore/main/scripts/bootstrap.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/ssw-llq/surfcore/main/scripts/bootstrap.ps1 | iex"
 ```
 
 跑完同样要：**重启 DSH → 设置 → SurfCore → 诊断 → 一键安装（全部）**。

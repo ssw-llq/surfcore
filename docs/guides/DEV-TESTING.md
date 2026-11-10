@@ -24,7 +24,7 @@
 
 - [ ] 完全退出 DSH。
 - [ ] 下载最新的 dev Pre-release zip：
-      `https://codeload.github.com/Mieksido/surfcore/zip/refs/tags/v0.8.6-dev.2`
+      `https://codeload.github.com/ssw-llq/surfcore/zip/refs/tags/v0.8.6-dev.2`
       （tag 换成当时的 dev 版本；只解压出 `surfcore-0.8.6-dev.2/` 这一层）。
 - [ ] 备份现有安装目录（改名或复制一份），把新包内容覆盖过去。
 - [ ] 启动 DSH，确认设置页版本是 `0.8.6-dev.2`。

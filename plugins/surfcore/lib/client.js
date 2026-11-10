@@ -1787,7 +1787,7 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
                   await applySelected({ firstInstall: true });
                 },
               }, "首次更新（先备份）") : null,
-              h(Btn, { kind: "qbw-btn2", onClick: () => window.open("https://github.com/Mieksido/surfcore/releases/latest", "_blank", "noopener") }, "去下载新版")));
+              h(Btn, { kind: "qbw-btn2", onClick: () => window.open("https://github.com/ssw-llq/surfcore/releases/latest", "_blank", "noopener") }, "去下载新版")));
           })(),
           working ? h(ProgressBar, {
             pct: dl?.percent ?? 0,
@@ -2541,7 +2541,7 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
                   },
                 }, busy === "apply-update" ? "更新中…" : `立即更新（${(updates.pending ?? []).length}）`)
                   : (updates.lastApply?.deterministic
-                    ? h(Btn, { onClick: () => window.open("https://github.com/Mieksido/surfcore/releases/latest", "_blank", "noopener") },
+                    ? h(Btn, { onClick: () => window.open("https://github.com/ssw-llq/surfcore/releases/latest", "_blank", "noopener") },
                       "此版本无法自动更新：手动下载")
                     : null),
               h(Btn, { kind: "qbw-btn2", onClick: () => setUpdateOpen(true), disabled: !(updates.results ?? []).length }, "查看详情"))),

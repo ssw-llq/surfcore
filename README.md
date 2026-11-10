@@ -22,7 +22,7 @@
 
 把这句话发给 DSH：
 
-> 帮我安装 https://github.com/Mieksido/surfcore ，按 README 的步骤来。
+> 帮我安装 https://github.com/ssw-llq/surfcore ，按 README 的步骤来。
 
 **顺序很重要**（DSH 常常先 install_bundle、后装依赖，结果激活时报 `Cannot find module '@deepseek-ai/schemastery'`）：
 
@@ -42,7 +42,7 @@
 ## 第一次装（4 条命令）
 
 ```powershell
-git clone --depth 1 https://github.com/Mieksido/surfcore.git
+git clone --depth 1 https://github.com/ssw-llq/surfcore.git
 cd surfcore
 npm install
 node scripts/setup-dsh.mjs      # 自动判断 DSH 用的 profile，不用填
@@ -50,7 +50,7 @@ node scripts/setup-dsh.mjs      # 自动判断 DSH 用的 profile，不用填
 
 重启 DSH → 设置 → SurfCore → **诊断 → 一键安装（全部）**（自动发现 SnowLuma、写白名单、起桥接）。
 
-> 不想敲命令：`powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Mieksido/surfcore/main/scripts/bootstrap.ps1 | iex"`
+> 不想敲命令：`powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/ssw-llq/surfcore/main/scripts/bootstrap.ps1 | iex"`
 
 前置：Windows + Node ≥22.13 + DSH 0.2.1-rc.2 或更新（rc.3 已能安装，功能未完整回归） + SnowLuma（第三方，需自己装并扫码）。详见 [INSTALL.md](docs/guides/INSTALL.md)。
 
@@ -113,7 +113,7 @@ node scripts/setup-dsh.mjs      # 自动判断 DSH 用的 profile，不用填
 
 ```bash
 # 1) 取代码
-git clone https://github.com/Mieksido/surfcore.git
+git clone https://github.com/ssw-llq/surfcore.git
 cd surfcore
 
 # 2) 装依赖（postinstall 会自动修补 @snowluma/sdk 的 ESM bug）

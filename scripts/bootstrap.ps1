@@ -1,7 +1,7 @@
 ﻿# SurfCore 一键引导安装（Windows PowerShell）
 #
 # 陌生人用法（复制这一行到 PowerShell）：
-#   powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Mieksido/surfcore/main/scripts/bootstrap.ps1 | iex"
+#   powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/ssw-llq/surfcore/main/scripts/bootstrap.ps1 | iex"
 #
 # 只检查环境不安装：
 #   ... | iex -Check
@@ -84,13 +84,13 @@ if (Test-Path (Join-Path $Dir 'package.json')) {
     Pop-Location
   }
 } elseif ($gitCmd) {
-  & git clone --depth 1 https://github.com/Mieksido/surfcore.git $Dir
+  & git clone --depth 1 https://github.com/ssw-llq/surfcore.git $Dir
   if ($LASTEXITCODE -ne 0) { Bad 'git clone 失败'; return }
   Ok '克隆完成'
 } else {
   $zip = Join-Path $env:TEMP 'surfcore-main.zip'
   Say '  下载 zip …'
-  Invoke-WebRequest -Uri 'https://github.com/Mieksido/surfcore/archive/refs/heads/main.zip' -OutFile $zip
+  Invoke-WebRequest -Uri 'https://github.com/ssw-llq/surfcore/archive/refs/heads/main.zip' -OutFile $zip
   Expand-Archive -LiteralPath $zip -DestinationPath $env:TEMP -Force
   $src = Get-ChildItem $env:TEMP -Directory -Filter 'surfcore-main' | Select-Object -First 1
   Move-Item $src.FullName $Dir
