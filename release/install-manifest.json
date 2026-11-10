@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "version": "0.8.10",
   "source": "git:HEAD",
-  "generatedAt": "2026-11-10T04:45:53.013Z",
+  "generatedAt": "2026-11-10T04:31:56.959Z",
   "files": {
     ".gitignore": "7999eeae654e6f1e9fd6565ea48496ffd32b2f5fbf657ac8e03f5c659e8584cd",
     ".npmrc": "a093bb2fed59d699b7f9a62a5203cc196054c624e9c39c6d908c9e7db5dd2464",
@@ -22,7 +22,7 @@
     "docs/PITFALLS.md": "20d3d5c90816bab3f68ed1ac4cbf8f74215db1267dabe5ce53584791c9e442b8",
     "docs/README.md": "efcaf7cfc014db961a9e57afb5ffeee27b326fab711306b1a5dc83b5ccb11aa7",
     "docs/RELEASE-QUEUE.md": "3ba33463da208e2b5de4e8de69284b3350427fe8454ebf2e70415c8e52f33524",
-    "docs/RELEASE.md": "b9ac50ed0a248be17842fe687cf26936310ad76c1f79ca51b0ce97c08f4d7d63",
+    "docs/RELEASE.md": "3b2f875b04fc0b9f6d18cb8936f9c488fe38643352e590a5e639467ab312a9df",
     "docs/RISK_REGISTER.md": "79587e248eb1dc904392e3bacd044eed636f018109aec82c6df5bf3f73af066f",
     "docs/ROADMAP.md": "7b8e16219980abc5715e533dd3280564e4ce69c259f70feb3a965580f6b69c7f",
     "docs/TOKEN-OPTIMIZATION-PROGRESS.md": "d69edb7f48be748847160215c9fbd5e9b4f7e93ac32f970cb63d2621d6192d91",
