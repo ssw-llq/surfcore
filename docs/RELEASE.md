@@ -114,12 +114,15 @@ cd plugins/surfcore && npm test # 必须 0 失败
 
 ## 四、发布记录
 
+> 2026-11-10 起发布源迁到 `ssw-llq/surfcore`；v0.8.10 之前的历史 Release 仍在原仓库 `Mieksido/surfcore`（链接保留原地址）。
+
 | 版本 | 日期 | 仓库 | main | Release |
 | --- | --- | --- | --- | --- |
-| v0.6.22 | 2026-10-28 | surfcore / surfvoicelocal / surfvoicecloud | d7f6b33 / d739c30 / f0d94d7 | https://github.com/ssw-llq/surfcore/releases/tag/v0.6.22 |
-| v0.6.21 | 2026-10-28 | surfcore / surfvoicelocal / surfvoicecloud | e2bae36 / a1e24be / e914462 | https://github.com/ssw-llq/surfcore/releases/tag/v0.6.21 |
-| v0.6.20 | 2026-10-28 | surfcore | 12975a3 | https://github.com/ssw-llq/surfcore/releases/tag/v0.6.20 |
-| v0.6.19 | 2026-10-28 | surfcore | 28346fd | https://github.com/ssw-llq/surfcore/releases/tag/v0.6.19 |
+| v0.8.10 | 2026-11-10 | surfcore | 9f3a54c | https://github.com/ssw-llq/surfcore/releases/tag/v0.8.10 |
+| v0.6.22 | 2026-10-28 | surfcore / surfvoicelocal / surfvoicecloud | d7f6b33 / d739c30 / f0d94d7 | https://github.com/Mieksido/surfcore/releases/tag/v0.6.22 |
+| v0.6.21 | 2026-10-28 | surfcore / surfvoicelocal / surfvoicecloud | e2bae36 / a1e24be / e914462 | https://github.com/Mieksido/surfcore/releases/tag/v0.6.21 |
+| v0.6.20 | 2026-10-28 | surfcore | 12975a3 | https://github.com/Mieksido/surfcore/releases/tag/v0.6.20 |
+| v0.6.19 | 2026-10-28 | surfcore | 28346fd | https://github.com/Mieksido/surfcore/releases/tag/v0.6.19 |
 
 > 更早版本见 GitHub Releases 页；本表只记最近几次，避免无限增长。
 
